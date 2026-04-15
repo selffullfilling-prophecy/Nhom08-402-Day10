@@ -1,0 +1,37 @@
+{
+  "run_id": "bonus-inject-2026-04-15T05-45Z",
+  "run_timestamp": "2026-04-15T09:47:45.080593+00:00",
+  "raw_path": "data/raw/policy_export_dirty.csv",
+  "raw_records": 11,
+  "cleaned_records": 7,
+  "quarantine_records": 4,
+  "latest_exported_at": "2026-04-10T08:00:00",
+  "no_refund_fix": true,
+  "skipped_validate": true,
+  "cleaned_csv": "artifacts/cleaned/cleaned_bonus-inject-2026-04-15T05-45Z.csv",
+  "chroma_path": "./chroma_db",
+  "chroma_collection": "day10_kb",
+  "freshness_sla_ingest_hours": 24.0,
+  "freshness_sla_publish_hours": 2.0,
+  "freshness": {
+    "run_id": "bonus-inject-2026-04-15T05-45Z",
+    "overall_status": "FAIL",
+    "ingest": {
+      "status": "FAIL",
+      "detail": {
+        "timestamp": "2026-04-10T08:00:00",
+        "age_hours": 121.796,
+        "sla_hours": 24.0,
+        "reason": "freshness_sla_exceeded"
+      }
+    },
+    "publish": {
+      "status": "PASS",
+      "detail": {
+        "timestamp": "2026-04-15T09:47:45.080593+00:00",
+        "age_hours": 0.0,
+        "sla_hours": 2.0
+      }
+    }
+  }
+}
