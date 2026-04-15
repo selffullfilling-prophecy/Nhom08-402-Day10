@@ -3,7 +3,7 @@
 
 version: "1.0"
 dataset: "kb_chunk_export"
-owner_team: "__TODO__"
+owner_team: "Nhom08-402"
 
 schema_cleaned:
   chunk_id:
@@ -34,9 +34,14 @@ quality_rules:
     severity: "halt"
 
 freshness:
-  measured_at: "publish"  # ingest | cleaned | publish
-  sla_hours: 24
-  alert_channel: "__TODO__"
+  boundaries:
+    ingest:
+      source_field: "latest_exported_at"
+      sla_hours: 24
+    publish:
+      source_field: "run_timestamp"
+      sla_hours: 2
+  alert_channel: "slack:#vin-assignment-alerts"
 
 canonical_sources:
   - path: "data/docs/policy_refund_v4.txt"
@@ -58,3 +63,4 @@ allowed_doc_ids:
 # Merit/Distinction: có thể đưa cutoff versioning vào env và tham chiếu ở đây (tránh hard-code trong code).
 policy_versioning:
   hr_leave_min_effective_date: "2026-01-01"
+  env_override: "HR_LEAVE_MIN_EFFECTIVE_DATE"

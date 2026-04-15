@@ -15,6 +15,7 @@ Vector store và agent Day 09 chỉ ổn nếu **pipeline ingest → clean → v
 
 - Export “raw” từ hệ nguồn (CSV mẫu) có **duplicate**, **dòng thiếu ngày**, **doc_id lạ**, **ngày hiệu lực không ISO**, **xung đột version HR (10 vs 12 ngày phép)**, và **chunk policy sai cửa sổ hoàn tiền (14 vs 7 ngày)** — đúng narrative slide 3 Day 10 + mở rộng phân tầng.
 - Nhóm phải có **log số record**, **quarantine**, **expectation halt có kiểm soát**, **run_id** trên manifest, và **bằng chứng before/after** trên retrieval test.
+- Bonus đã tích hợp: **pydantic schema validate thật** trên cleaned rows và **freshness 2 boundary** (ingest + publish).
 
 ---
 
@@ -99,7 +100,7 @@ cp .env.example .env
 # Luồng chuẩn: fix stale refund 14→7, expectation pass, embed
 python etl_pipeline.py run
 
-# Kiểm tra freshness theo manifest vừa tạo
+# Kiểm tra freshness theo manifest vừa tạo (2 boundary: ingest + publish)
 python etl_pipeline.py freshness --manifest artifacts/manifests/manifest_<run-id>.json
 ```
 
@@ -151,6 +152,7 @@ python instructor_quick_check.py --manifest artifacts/manifests/manifest_<run-id
 ### Sprint 2 (60') — Clean + validate + embed
 
 - Baseline đã có sẵn: allowlist `doc_id`, chuẩn hoá `effective_date`, quarantine HR cũ, fix refund 14→7, dedupe, v.v. Nhóm phải thêm ≥ **3 rule mới** và ≥ **2 expectation mới** (đếm trên file nhận được).
+- Ở nhánh hiện tại, expectation đã có thêm gate `pydantic_cleaned_schema_valid` (halt) để enforce schema thật trước publish.
 - **Chống trivial:** mỗi rule/expectation mới phải có **tác động đo được** trên bộ mẫu hoặc trên inject (ghi trong `reports/group_report.md` bảng *metric_impact*: ví dụ `quarantine_records` tăng khi inject BOM, `expectation X fail` trước khi fix, v.v.). Rule chỉ “strip space” mà không đổi số liệu / không có kịch bản chứng minh → **trừ theo SCORING**.
 - Đảm bảo embed **idempotent** (upsert `chunk_id` + prune id thừa sau publish — baseline đã làm).
 
@@ -172,6 +174,7 @@ python instructor_quick_check.py --manifest artifacts/manifests/manifest_<run-id
 
 - Điền `docs/pipeline_architecture.md`, `docs/data_contract.md`, `docs/runbook.md`.
 - `python etl_pipeline.py freshness --manifest …` — giải thích PASS/WARN/FAIL trong runbook.
+- Freshness report cần diễn giải rõ kết quả **ingest boundary** và **publish boundary**.
 - Hoàn thành `reports/group_report.md` + mỗi người `reports/individual/[ten].md`.
 
 **DoD:** README nhóm có “một lệnh chạy cả pipeline”; peer review 3 câu hỏi (slide Phần E) được ghi trong group report hoặc runbook.
