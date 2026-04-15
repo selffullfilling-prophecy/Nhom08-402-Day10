@@ -10,6 +10,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 
+from quality.schema_validation import validate_cleaned_rows_with_pydantic
+
 
 @dataclass
 class ExpectationResult:
@@ -109,6 +111,53 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
             ok6,
             "halt",
             f"violations={len(bad_hr_annual)}",
+        )
+    )
+
+    # E7: chunk_id phải unique để đảm bảo upsert idempotent không bị đè sai.
+    chunk_ids = [(r.get("chunk_id") or "").strip() for r in cleaned_rows]
+    dup_count = len(chunk_ids) - len(set(chunk_ids))
+    ok7 = dup_count == 0
+    results.append(
+        ExpectationResult(
+            "chunk_id_unique",
+            ok7,
+            "halt",
+            f"duplicate_chunk_id_count={dup_count}",
+        )
+    )
+
+    # E8: exported_at sau clean phải đúng ISO timestamp cơ bản yyyy-mm-ddTHH:MM:SS.
+    ts_bad = [
+        r
+        for r in cleaned_rows
+        if not re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$", (r.get("exported_at") or "").strip())
+    ]
+    ok8 = len(ts_bad) == 0
+    results.append(
+        ExpectationResult(
+            "exported_at_iso_timestamp",
+            ok8,
+            "warn",
+            f"invalid_exported_at_rows={len(ts_bad)}",
+        )
+    )
+
+    # E9: pydantic schema validation (bonus): enforce cleaned schema with strict contract checks.
+    schema_result = validate_cleaned_rows_with_pydantic(cleaned_rows)
+    schema_detail = (
+        f"validated_rows={schema_result['validated_rows']} "
+        f"error_count={schema_result['error_count']}"
+    )
+    if schema_result["sample_errors"]:
+        first = schema_result["sample_errors"][0]
+        schema_detail += f" first_error_row={first.get('row_index')}"
+    results.append(
+        ExpectationResult(
+            "pydantic_cleaned_schema_valid",
+            bool(schema_result["passed"]),
+            "halt",
+            schema_detail,
         )
     )
 
