@@ -23,9 +23,14 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Ensure project root is importable when the script is launched via wrappers.
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from dotenv import load_dotenv
 
-from monitoring.freshness_check import check_manifest_freshness
+from monitoring.freshness_check import check_manifest_freshness_boundaries
 from quality.expectations import run_expectations
 from transform.cleaning_rules import clean_rows, load_raw_csv, write_cleaned_csv, write_quarantine_csv
 
@@ -60,6 +65,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     def log(msg: str) -> None:
         print(msg)
         _log(log_path, msg)
+
+    ingest_sla_hours = float(
+        os.environ.get(
+            "FRESHNESS_SLA_INGEST_HOURS",
+            os.environ.get("FRESHNESS_SLA_HOURS", "24"),
+        )
+    )
+    publish_sla_hours = float(os.environ.get("FRESHNESS_SLA_PUBLISH_HOURS", "2"))
 
     rows = load_raw_csv(raw_path)
     raw_count = len(rows)
@@ -116,13 +129,37 @@ def cmd_run(args: argparse.Namespace) -> int:
         "cleaned_csv": str(cleaned_path.relative_to(ROOT)),
         "chroma_path": os.environ.get("CHROMA_DB_PATH", "./chroma_db"),
         "chroma_collection": os.environ.get("CHROMA_COLLECTION", "day10_kb"),
+        "freshness_sla_ingest_hours": ingest_sla_hours,
+        "freshness_sla_publish_hours": publish_sla_hours,
     }
     man_path = MAN_DIR / f"manifest_{run_id.replace(':', '-')}.json"
     man_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    log(f"manifest_written={man_path.relative_to(ROOT)}")
 
-    status, fdetail = check_manifest_freshness(man_path, sla_hours=float(os.environ.get("FRESHNESS_SLA_HOURS", "24")))
-    log(f"freshness_check={status} {json.dumps(fdetail, ensure_ascii=False)}")
+    freshness_summary = check_manifest_freshness_boundaries(
+        man_path,
+        ingest_sla_hours=ingest_sla_hours,
+        publish_sla_hours=publish_sla_hours,
+    )
+    manifest["freshness"] = freshness_summary
+    man_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    log(
+        "freshness_ingest_check="
+        f"{freshness_summary['ingest']['status']} "
+        f"{json.dumps(freshness_summary['ingest']['detail'], ensure_ascii=False)}"
+    )
+    log(
+        "freshness_publish_check="
+        f"{freshness_summary['publish']['status']} "
+        f"{json.dumps(freshness_summary['publish']['detail'], ensure_ascii=False)}"
+    )
+    log(
+        "freshness_check="
+        f"{freshness_summary['overall_status']} "
+        f"{json.dumps({'ingest': freshness_summary['ingest']['status'], 'publish': freshness_summary['publish']['status']}, ensure_ascii=False)}"
+    )
+
+    log(f"manifest_written={man_path.relative_to(ROOT)}")
 
     log("PIPELINE_OK")
     return 0
@@ -182,10 +219,20 @@ def cmd_freshness(args: argparse.Namespace) -> int:
     if not p.is_file():
         print(f"manifest not found: {p}", file=sys.stderr)
         return 1
-    sla = float(os.environ.get("FRESHNESS_SLA_HOURS", "24"))
-    status, detail = check_manifest_freshness(p, sla_hours=sla)
-    print(status, json.dumps(detail, ensure_ascii=False))
-    return 0 if status != "FAIL" else 1
+    ingest_sla_hours = float(
+        os.environ.get(
+            "FRESHNESS_SLA_INGEST_HOURS",
+            os.environ.get("FRESHNESS_SLA_HOURS", "24"),
+        )
+    )
+    publish_sla_hours = float(os.environ.get("FRESHNESS_SLA_PUBLISH_HOURS", "2"))
+    summary = check_manifest_freshness_boundaries(
+        p,
+        ingest_sla_hours=ingest_sla_hours,
+        publish_sla_hours=publish_sla_hours,
+    )
+    print(summary["overall_status"], json.dumps(summary, ensure_ascii=False))
+    return 0 if summary["overall_status"] != "FAIL" else 1
 
 
 def main() -> int:
