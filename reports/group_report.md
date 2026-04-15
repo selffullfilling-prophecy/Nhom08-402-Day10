@@ -1,6 +1,6 @@
 # Báo Cáo Nhóm — Lab Day 10: Data Pipeline & Data Observability
 
-**Tên nhóm:** Nhóm 08 — Day10 Bonus Track  
+**Tên nhóm:** Nhóm 08 - 402 — Day10 Bonus Track  
 **Thành viên:**
 | Tên | Vai trò (Day 10) | Email |
 |-----|------------------|-------|
@@ -108,4 +108,3 @@ Có. Day 10 publish snapshot đã clean/validate vào collection `day10_kb`, nê
 - Grading đã pass đủ 3 câu trong `artifacts/eval/grading_run.jsonl`; cần rerun sau mỗi lần đổi rule clean để tránh regression.
 - Rủi ro lớn nhất hiện tại là ingest stale (nhiều run liên tiếp FAIL ở ingest boundary).
 - Bộ eval còn nhỏ; chưa có slice mở rộng >= 5 câu theo từng nhóm lỗi để tăng độ tin cậy Distinction nhánh (c).
-- Cần điền đủ thông tin hành chính trước khi nộp bản cuối (email, Ingestion Owner, tên nhóm chính thức).
