@@ -1,16 +1,18 @@
 # Báo Cáo Nhóm — Lab Day 10: Data Pipeline & Data Observability
 
-**Tên nhóm:** ___________  
+**Tên nhóm:** Nhóm 08 — Day10 Bonus Track  
 **Thành viên:**
 | Tên | Vai trò (Day 10) | Email |
 |-----|------------------|-------|
-| ___ | Ingestion / Raw Owner | ___ |
-| ___ | Cleaning & Quality Owner | ___ |
-| ___ | Embed & Idempotency Owner | ___ |
-| ___ | Monitoring / Docs Owner | ___ |
+| Nguyễn Hoàng Việt Hùng | System Upgrade Owner (Bonus Track) | nguyenhoangviethung@gmail.com |
+| Hoàng Đức Hưng | Cleaning Owner | hoangduchung0311@gmail.com |
+| Mai Viết Hoàng | Expectation Suite Maintainer |  hoangmai04222@gmail.com |
+| Lê Hồng Anh | Monitoring Owner | anh.anhle2004@gmail.com |
+| Nguyễn Thanh Bình | Grading & Tooling Owner | binhntph50046@gmail.com |
+| Nguyễn Thị Hương Giang | Ingestion / Raw Owner | nguyenhuonggiang06092004@gmail.com |
 
 **Ngày nộp:** 2026-04-15  
-**Repo:** selffullfilling-prophecy/Nhom08-402-Day10 (branch: hung/feat/etl)  
+**Repo:** selffullfilling-prophecy/Nhom08-402-Day10  
 **Độ dài khuyến nghị:** 600–1000 từ
 
 ---
@@ -27,7 +29,9 @@
 
 **Tóm tắt luồng:**
 
-Raw export duoc doc tu data/raw/policy_export_dirty.csv. ETL sinh run_id va log cac chi so raw_records, cleaned_records, quarantine_records. Sau do cleaning rules chuan hoa ngay, quarantine record loi, va ap stale-refund fix (7 ngay) o run chuan. Expectation suite phan tach halt/warn de chan publish khi gap loi nghiem trong, nhung van cho phep demo inject qua flag --skip-validate. Ngoai expectation custom, nhom them pydantic schema gate that su de validate tung cleaned row truoc embed. Lop embed publish cleaned snapshot vao Chroma collection day10_kb theo co che upsert chunk_id va prune id cu de dam bao idempotent. Moi run sinh manifest trong artifacts/manifests de truy vet lineage, va freshness monitor theo 2 boundary ingest/publish.
+Nguồn raw của nhóm là `data/raw/policy_export_dirty.csv`. Chuỗi xử lý end-to-end giữ kiến trúc ingest -> clean -> validate -> embed. `run_id` được sinh theo timestamp hoặc truyền tay qua `--run-id`, sau đó ghi vào log `artifacts/logs/run_<run-id>.log` và manifest `artifacts/manifests/manifest_<run-id>.json`.
+
+Pipeline có 3 lớp chính: (1) cleaning + quarantine theo reason; (2) expectation suite có `halt/warn` và gate schema Pydantic; (3) embed idempotent vào Chroma (`upsert chunk_id` + prune id cũ). Nhánh bonus nâng freshness lên 2 boundary (ingest/publish) để tách lỗi upstream và lỗi publish. Evidence chính dùng 3 run: `bonus-clean-2026-04-15T05-40Z`, `bonus-inject-2026-04-15T05-45Z`, `bonus-clean-final-2026-04-15T05-50Z`.
 
 **Lệnh chạy một dòng (copy từ README thực tế của nhóm):**
 
@@ -43,22 +47,22 @@ python etl_pipeline.py run && python eval_retrieval.py --out artifacts/eval/befo
 
 | Rule / Expectation mới (tên ngắn) | Trước (số liệu) | Sau / khi inject (số liệu) | Chứng cứ (log / CSV / commit) |
 |-----------------------------------|------------------|-----------------------------|-------------------------------|
-| invalid_source_chunk_id + duplicate_source_chunk_id | Khong track rieng | Quarantine tang khi co source id loi/trung | transform/cleaning_rules.py + cot reason trong quarantine CSV |
-| invalid_exported_at_format | Khong track rieng | Quarantine khi exported_at sai format | transform/cleaning_rules.py |
-| stale_refund_migration_marker | bonus-inject cleaned_records=7, quarantine=4 | bonus-clean-final cleaned_records=6, quarantine=5 | manifest_bonus-inject-2026-04-15T05-45Z.json vs manifest_bonus-clean-final-2026-04-15T05-50Z.json |
-| chunk_id_unique (halt) | baseline chua co | duplicate_chunk_id_count=0 o ca 2 run | run_bonus-inject-2026-04-15T05-45Z.log + run_bonus-clean-final-2026-04-15T05-50Z.log |
-| exported_at_iso_timestamp (warn) | baseline chua co | invalid_exported_at_rows=0 | expectation log run chuan |
-| pydantic_cleaned_schema_valid (halt) | chua co trong baseline | validated_rows=7 (inject), validated_rows=6 (clean), error_count=0 | run_bonus-inject-2026-04-15T05-45Z.log + run_bonus-clean-final-2026-04-15T05-50Z.log |
+| stale_refund_migration_marker (rule) | Chưa tách marker migration | Inject: `cleaned=7`, `quarantine=4`; Clean-final: `cleaned=6`, `quarantine=5` | `manifest_bonus-inject-2026-04-15T05-45Z.json` và `manifest_bonus-clean-final-2026-04-15T05-50Z.json` |
+| hr_leave_cutoff_dynamic_from_contract_env (rule) | Dễ hard-code cutoff | Quarantine có `stale_hr_policy_effective_date`, `cutoff_source=contract` | `artifacts/quarantine/quarantine_hung-cleaning-report.csv` |
+| exported_at_format_guard (rule) | Chưa có guard format exported_at | Run clean-final: `invalid_exported_at_rows=0` (không false positive) | `run_bonus-clean-final-2026-04-15T05-50Z.log` |
+| chunk_id_unique (halt) | Chưa có gate idempotency-level | `duplicate_chunk_id_count=0` ở inject và clean-final | `run_bonus-inject-2026-04-15T05-45Z.log`, `run_bonus-clean-final-2026-04-15T05-50Z.log` |
+| exported_at_iso_timestamp (warn) | Chưa có expectation timestamp | `invalid_exported_at_rows=0` | `run_bonus-clean-2026-04-15T05-40Z.log` |
+| pydantic_cleaned_schema_valid (halt) | Chưa có schema gate thật | Inject: `validated_rows=7`; Clean-final: `validated_rows=6`; `error_count=0` | `run_bonus-inject-2026-04-15T05-45Z.log`, `run_bonus-clean-final-2026-04-15T05-50Z.log` |
 
 **Rule chính (baseline + mở rộng):**
 
-- Baseline: allowlist doc_id, normalize effective_date, quarantine stale HR policy, dedupe chunk text, stale refund 14->7 fix.
-- Mo rong: validate source chunk_id, validate exported_at format, quarantine stale migration marker policy-v3.
-- Expectation mo rong: chunk_id_unique (halt), exported_at_iso_timestamp (warn), pydantic_cleaned_schema_valid (halt).
+- Baseline: allowlist `doc_id`, normalize `effective_date`, quarantine dữ liệu thiếu, dedupe chunk text, fix refund 14 -> 7 ở run chuẩn.
+- Mở rộng: quarantine marker migration cũ, cutoff HR động theo contract/env, guard timestamp.
+- Expectation mới: `chunk_id_unique` (halt), `exported_at_iso_timestamp` (warn), `pydantic_cleaned_schema_valid` (halt).
 
 **Ví dụ 1 lần expectation fail (nếu có) và cách xử lý:**
 
-Run bonus-inject-2026-04-15T05-45Z co expectation[refund_no_stale_14d_window] FAIL (violations=2) do tat refund fix. Trong sprint 3 day la co chu dich va duoc tiep tuc bang --skip-validate de thu hoi bang chung retrieval xau. Sau do rerun chuan bonus-clean-final-2026-04-15T05-50Z de expectation nay tro lai OK truoc khi publish.
+Ở run `bonus-inject-2026-04-15T05-45Z`, expectation `refund_no_stale_14d_window` fail với `violations=2` do cố tình tắt refund fix (`--no-refund-fix`) và bật `--skip-validate` để ghi nhận scenario xấu cho Sprint 3. Sau đó nhóm chạy lại run chuẩn `bonus-clean-final-2026-04-15T05-50Z`, expectation này trở về `OK (violations=0)` trước khi chốt evidence.
 
 ---
 
@@ -68,15 +72,16 @@ Run bonus-inject-2026-04-15T05-45Z co expectation[refund_no_stale_14d_window] FA
 
 **Kịch bản inject:**
 
-Lenh inject: python etl_pipeline.py run --run-id bonus-inject-2026-04-15T05-45Z --no-refund-fix --skip-validate
+Lệnh inject: `python etl_pipeline.py run --run-id bonus-inject-2026-04-15T05-45Z --no-refund-fix --skip-validate`
 
-Muc tieu: dua chunk stale "14 ngay lam viec" vao index de chung minh retrieval bi anh huong khi bo qua data quality gate.
+Mục tiêu của kịch bản này là cố ý cho dữ liệu stale (refund 14 ngày) đi qua publish để đo suy giảm retrieval khi bypass quality gate.
 
 **Kết quả định lượng (từ CSV / bảng):**
 
-- artifacts/eval/bonus_inject_eval.csv: q_refund_window co hits_forbidden=yes.
-- artifacts/eval/bonus_clean_final_eval.csv: q_refund_window tro lai hits_forbidden=no.
-- q_leave_version giu on dinh: contains_expected=yes, hits_forbidden=no, top1_doc_expected=yes.
+- `artifacts/eval/bonus_inject_eval.csv`: câu `q_refund_window` có `hits_forbidden=yes`, top preview chứa cụm stale `14 ngày làm việc`.
+- `artifacts/eval/bonus_clean_final_eval.csv`: cùng câu `q_refund_window` chuyển về `hits_forbidden=no`, preview đã là `7 ngày làm việc`.
+- Các câu còn lại giữ ổn định: `q_p1_sla`, `q_lockout`, `q_leave_version` đều đúng kỳ vọng; riêng `q_leave_version` có `top1_doc_expected=yes`.
+- Grading chuẩn `artifacts/eval/grading_run.jsonl` có đủ 3 dòng `gq_d10_01..03`; cả 3 câu `contains_expected=true`, và `gq_d10_03` có `top1_doc_matches=true`.
 
 ---
 
@@ -84,7 +89,9 @@ Muc tieu: dua chunk stale "14 ngay lam viec" vao index de chung minh retrieval b
 
 > SLA bạn chọn, ý nghĩa PASS/WARN/FAIL trên manifest mẫu.
 
-Nhom tach freshness thanh 2 boundary: ingest (SLA 24h) va publish (SLA 2h). Voi run bonus-clean-final-2026-04-15T05-50Z, ingest boundary FAIL vi latest_exported_at=2026-04-10T08:00:00 da cu hon SLA, nhung publish boundary PASS vi run_timestamp vua tao. Dien giai: ingest FAIL canh bao do cu cua snapshot nguon; publish PASS xac nhan pipeline vua publish thanh cong. Cach do nay giam false positive va cung cap observability ro hon cho van hanh.
+Nhóm dùng freshness 2 boundary với SLA tách riêng: ingest = 24h, publish = 2h. Ở run `bonus-clean-final-2026-04-15T05-50Z`, manifest ghi ingest `FAIL` (age `121.847h` > `24h`) nhưng publish `PASS` (age `0.0h` <= `2h`). Kết luận: nguồn cũ nhưng pipeline publish đúng hạn.
+
+Nhóm cũng bổ sung parse timestamp an toàn để tránh crash khi manifest thiếu/sai định dạng thời gian; thay vào đó trả về trạng thái có diễn giải (`WARN/FAIL`) kèm lý do.
 
 ---
 
@@ -92,13 +99,13 @@ Nhom tach freshness thanh 2 boundary: ingest (SLA 24h) va publish (SLA 2h). Voi 
 
 > Dữ liệu sau embed có phục vụ lại multi-agent Day 09 không? Nếu có, mô tả tích hợp; nếu không, giải thích vì sao tách collection.
 
-Co. Day 10 publish snapshot vao Chroma collection day10_kb, Day 09 retrieval co the tro collection nay de su dung context da qua clean/validate. Neu can test song song voi index cu thi doi CHROMA_COLLECTION de tach moi truong thu nghiem.
+Có. Day 10 publish snapshot đã clean/validate vào collection `day10_kb`, nên stack retrieval từ Day 09 có thể reuse trực tiếp bằng cách trỏ đúng `CHROMA_COLLECTION`. Trong trường hợp cần A/B test với index cũ, nhóm giữ khả năng tách collection theo biến môi trường để chạy song song mà không làm nhiễu kết quả demo.
 
 ---
 
 ## 6. Rủi ro còn lại & việc chưa làm
 
-- Bộ eval/grading (đã thực hiện và đạt kết quả tốt qua `grading_run.jsonl`): Pipeline xử lý đúng theo thiết kế và truy xuất chính xác nội dung với cả 3 câu hỏi đánh giá theo chuẩn `gq_d10_01` (7 ngày hoàn), `gq_d10_02` (SLA P1 4 giờ), `gq_d10_03` (12 ngày nghỉ phép theo tài liệu 2026).
- - Hạn chế: Chưa có thêm nhiều bộ dataset test (eval data slice) mở rộng từ 5 câu trở lên để xem xét sự ổn định cho các trường hợp biên để thêm bằng chứng Distinction (c).
- - Việc cần làm tiếp theo: Hoàn tất report cá nhân cho từng thành viên.
- - Rủi ro Data drift: Trong thời gian tới nếu format schema từ HR bị update thì pydantic model cũng cần theo dõi để mở rộng rule.
+- Grading đã pass đủ 3 câu trong `artifacts/eval/grading_run.jsonl`; cần rerun sau mỗi lần đổi rule clean để tránh regression.
+- Rủi ro lớn nhất hiện tại là ingest stale (nhiều run liên tiếp FAIL ở ingest boundary).
+- Bộ eval còn nhỏ; chưa có slice mở rộng >= 5 câu theo từng nhóm lỗi để tăng độ tin cậy Distinction nhánh (c).
+- Cần điền đủ thông tin hành chính trước khi nộp bản cuối (email, Ingestion Owner, tên nhóm chính thức).
