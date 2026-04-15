@@ -25,7 +25,7 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument(
         "--questions",
-        default=str(ROOT / "data" / "test_questions.json"),
+        default=str(ROOT / "data" / "grading_questions.json"),
     )
     p.add_argument(
         "--out",
