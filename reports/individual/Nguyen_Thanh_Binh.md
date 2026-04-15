@@ -43,14 +43,16 @@ Trong quá trình test grading_run.py, tôi phát hiện output grading_run.json
 
 ## 4. Bằng chứng trước / sau (80–120 từ)
 
-> Dán ngắn 2 dòng từ `before_after_eval.csv` hoặc tương đương; ghi rõ `run_id`.
+Sau khi chạy grading_run.py với run_id=2026-04-15T10-42Z, file grading_run.jsonl cho thấy retrieval hoạt động tốt. Ví dụ:
 
-_________________
+- {"id": "q_refund_window", "question": "Khách hàng có bao nhiêu ngày để yêu cầu hoàn tiền...", "top1_doc_id": "policy_refund_v4", "contains_expected": true, "hits_forbidden": false, "top1_doc_matches": null}
+
+- {"id": "q_leave_version", "question": "Theo chính sách nghỉ phép hiện hành (2026)...", "top1_doc_id": "hr_leave_policy", "contains_expected": true, "hits_forbidden": false, "top1_doc_matches": true}
+
+Trước khi fix path questions, script fail với FileNotFoundError. Sau fix, tất cả 4 câu đều contains_expected=true, hits_forbidden=false, và q_leave_version top1_doc_matches=true, chứng minh cleaning rules loại bỏ version cũ thành công.
 
 ---
 
 ## 5. Cải tiến tiếp theo (40–80 từ)
 
-> Nếu có thêm 2 giờ — một việc cụ thể (không chung chung).
-
-_________________
+Nếu có thêm 2 giờ, tôi sẽ thêm validation schema cho grading_run.jsonl sử dụng Pydantic, để đảm bảo format output luôn đúng và dễ debug. Ngoài ra, implement caching cho embedding để tránh download model mỗi lần chạy, tăng tốc pipeline.
